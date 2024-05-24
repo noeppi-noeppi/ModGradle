@@ -11,12 +11,13 @@ import org.gradle.api.Project;
 import org.gradle.api.invocation.Gradle;
 import org.moddingx.modgradle.ModGradle;
 import org.moddingx.modgradle.util.StringUtil;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
 
 import javax.annotation.Nullable;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.io.Writer;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -103,15 +104,20 @@ public class Versioning {
     /**
      * Gets the current project build version based on the files in a maven repository.
      * @param baseVersion The project version without the release number.
-     * @param localMaven The local path of the maven repository.
+     * @param mavenRepo The local path of the maven repository.
      */
-    public static String getVersion(Project project, String baseVersion, String localMaven) {
+    public static String getVersion(Project project, String baseVersion, String mavenRepo) {
         try {
             String group = project.getGroup().toString();
             String artifact = project.getName();
             if (group.isEmpty()) throw new IllegalStateException("Can't get version: Group not set.");
             if (artifact.isEmpty()) throw new IllegalStateException("Can't get version: Artifact not set.");
-            Path mavenPath = project.file(localMaven).toPath().resolve(group.replace('.', '/')).resolve(artifact);
+            if (mavenRepo.startsWith("http://") || mavenRepo.startsWith("https://")) {
+                URL url = new URL(mavenRepo + "/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml");
+                return Versioning.getVersion(baseVersion, url);
+            }
+
+            Path mavenPath = project.file(mavenRepo).toPath().resolve(group.replace('.', '/')).resolve(artifact);
             if (!Files.isDirectory(mavenPath)) {
                 return baseVersion + ".0";
             }
@@ -130,6 +136,36 @@ public class Versioning {
                         .orElse("0");
             }
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static String getVersion(String baseVersion, URL url) {
+        try {
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+
+            Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(connection.getInputStream());
+            NodeList versionNodes = doc.getElementsByTagName("version");
+
+            String latestVersion = null;
+            for (int i = 0; i < versionNodes.getLength(); i++) {
+                String version = versionNodes.item(i).getTextContent();
+                if (version.startsWith(baseVersion)) {
+                    latestVersion = version;
+                }
+            }
+
+            if (latestVersion == null) {
+                return baseVersion + ".0";
+            }
+
+            return baseVersion + "." + (Integer.parseInt(latestVersion.substring(latestVersion.lastIndexOf('.') + 1)) + 1);
+        } catch (FileNotFoundException e) {
+            // This exception is thrown if the maven-metadata.xml file doesn't exist at the provided URL,
+            // which would be the case if there were no previous publications to this Maven repository with this project
+            return baseVersion + ".0";
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }

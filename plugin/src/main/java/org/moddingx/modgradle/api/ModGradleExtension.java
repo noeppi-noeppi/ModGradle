@@ -46,8 +46,8 @@ public class ModGradleExtension {
     /**
      * Alias for {@link Versioning#getVersion(Project, String, String)}.
      */
-    public String projectVersion(String baseVersion, String localMaven) {
-        return Versioning.getVersion(this.project, baseVersion, localMaven);
+    public String projectVersion(String baseVersion, String mavenRepo) {
+        return Versioning.getVersion(this.project, baseVersion, mavenRepo);
     }
 
     /**

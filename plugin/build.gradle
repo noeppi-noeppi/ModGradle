@@ -85,7 +85,9 @@ publishing {
     }
     repositories {
         maven {
-            url rootProject.file('../moddingx/maven')
+            name 'ModdingX'
+            url 'https://maven.moddingx.org/release'
+            credentials(PasswordCredentials)
         }
     }
 }
